@@ -17,6 +17,15 @@ wss.on("connection", (socket, req) => {
       return;
     }
 
+    // Register web client with a specific identifier
+    if (msg === "WEB_CLIENT") {
+      if (!webClients.includes(socket)) {
+        webClients.push(socket);
+        console.log("Web client registered. Total web clients:", webClients.length);
+      }
+      return;
+    }
+
     // Check if message is JSON data from ESP8266
     try {
       const data = JSON.parse(msg);
@@ -51,12 +60,6 @@ wss.on("connection", (socket, req) => {
         }
       });
       return;
-    }
-
-    // If it's not from ESP8266, treat as web client
-    if (socket !== espSocket) {
-      webClients.push(socket);
-      console.log("Web client connected. Total web clients:", webClients.length);
     }
   });
 
