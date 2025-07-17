@@ -45,9 +45,42 @@ wss.on("connection", (socket, req) => {
     try {
       const data = JSON.parse(msg);
       
+      // Handle heartbeat messages
+      if (data.type === "heartbeat") {
+        console.log("♥ Heartbeat received from ESP8266:", {
+          distance: data.distance,
+          manual_mode: data.manual_mode,
+          uptime: data.uptime,
+          wifi_rssi: data.wifi_rssi,
+          free_heap: data.free_heap
+        });
+        
+        // Update latest sensor data with heartbeat info
+        latestSensorData = {
+          ...latestSensorData,
+          ...data,
+          type: "sensor_data", // Convert to sensor_data for web clients
+          timestamp: new Date().toISOString()
+        };
+        
+        // Forward heartbeat as sensor data to web clients
+        webClients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(latestSensorData));
+          }
+        });
+        
+        // Send pong response to ESP8266
+        if (espSocket && espSocket.readyState === WebSocket.OPEN) {
+          espSocket.send("pong");
+        }
+        return;
+      }
+      
       if (data.type === "sensor_data") {
         // Cache the latest sensor data
         latestSensorData = data;
+        latestSensorData.timestamp = new Date().toISOString();
         
         // Determine distance status based on distance value
         let distanceStatus = "UNKNOWN";
@@ -69,7 +102,7 @@ wss.on("connection", (socket, req) => {
         if (distanceStatus === "DANGER") {
           console.log(`🚨 DANGER: Distance ${data.distance}cm detected!`);
         } else if (distanceStatus === "WARNING") {
-          console.log(`⚠️  WARNING: Distance ${data.distance}cm detected`);
+          console.log(`⚠  WARNING: Distance ${data.distance}cm detected`);
         } else if (distanceStatus === "SAFE") {
           console.log(`✅ SAFE: Distance ${data.distance}cm`);
         }
@@ -98,6 +131,12 @@ wss.on("connection", (socket, req) => {
       // Handle button events
       if (data.type === "button_event") {
         console.log("Button event received:", data);
+        // Update cached sensor data if available
+        if (latestSensorData) {
+          latestSensorData.manual_mode = data.manual_mode;
+          latestSensorData.timestamp = new Date().toISOString();
+        }
+        
         // Forward to web clients
         webClients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
@@ -261,6 +300,7 @@ console.log("- Manual mode toggle support");
 console.log("- Traffic light LED status monitoring");
 console.log("- Vibration and buzzer status monitoring");
 console.log("- Button event handling");
+console.log("- Heartbeat message handling");
 console.log("- Connection monitoring");
 console.log("- Automatic cleanup of dead connections");
 console.log("- Heartbeat pings to maintain connections");
