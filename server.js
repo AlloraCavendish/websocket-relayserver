@@ -14,8 +14,8 @@ wss.on("connection", (socket, req) => {
     const msg = message.toString();
     console.log("Received:", msg);
 
-    // ESP8266 identification - updated to match new device ID
-    if (msg === "ESP8266_DISTANCE_SENSOR" || msg === "ESP8266") {
+    // ESP8266 identification
+    if (msg === "ESP8266" || msg === "ESP8266_DISTANCE_SENSOR") {
       espSocket = socket;
       console.log("ESP8266 Distance Sensor connected.");
       
@@ -49,39 +49,59 @@ wss.on("connection", (socket, req) => {
         // Cache the latest sensor data
         latestSensorData = data;
         
+        // Determine distance status based on distance value
+        let distanceStatus = "UNKNOWN";
+        if (data.distance > 0) {
+          if (data.distance < 10) {
+            distanceStatus = "DANGER";
+          } else if (data.distance <= 30) {
+            distanceStatus = "WARNING";
+          } else {
+            distanceStatus = "SAFE";
+          }
+        }
+        
+        // Add status to data
+        data.distance_status = distanceStatus;
+        data.distance_cm = data.distance;
+        
         // Log distance status for monitoring
-        if (data.distance_status === "DANGER") {
-          console.log(`🚨 DANGER: Distance ${data.distance_cm}cm detected!`);
-        } else if (data.distance_status === "WARNING") {
-          console.log(`⚠️  WARNING: Distance ${data.distance_cm}cm detected`);
-        } else if (data.distance_status === "SAFE") {
-          console.log(`✅ SAFE: Distance ${data.distance_cm}cm`);
+        if (distanceStatus === "DANGER") {
+          console.log(`🚨 DANGER: Distance ${data.distance}cm detected!`);
+        } else if (distanceStatus === "WARNING") {
+          console.log(`⚠️  WARNING: Distance ${data.distance}cm detected`);
+        } else if (distanceStatus === "SAFE") {
+          console.log(`✅ SAFE: Distance ${data.distance}cm`);
         }
         
         // Forward sensor data to all web clients
         console.log("Forwarding sensor data to web clients:", {
-          distance: data.distance_cm,
-          status: data.distance_status,
-          analog_sensor: data.analog_sensor,
-          voltage: data.voltage,
+          distance: data.distance,
+          status: distanceStatus,
+          manual_mode: data.manual_mode,
+          red_led: data.red_led,
+          yellow_led: data.yellow_led,
+          green_led: data.green_led,
+          vibration: data.vibration,
+          buzzer: data.buzzer,
           device_id: data.device_id
         });
         
         webClients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
-            client.send(msg);
+            client.send(JSON.stringify(data));
           }
         });
         return;
       }
       
-      // Handle other event types if needed in the future
-      if (data.type === "distance_alert") {
-        console.log("Distance alert received:", data);
+      // Handle button events
+      if (data.type === "button_event") {
+        console.log("Button event received:", data);
         // Forward to web clients
         webClients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
-            client.send(msg);
+            client.send(JSON.stringify(data));
           }
         });
         return;
@@ -91,7 +111,7 @@ wss.on("connection", (socket, req) => {
       // Not JSON, continue with normal processing
     }
 
-    // Handle LED control commands from web clients
+    // Handle LED control commands from web clients (for backward compatibility)
     if (msg === "on" || msg === "off") {
       console.log(`LED command received: ${msg}`);
       if (espSocket && espSocket.readyState === WebSocket.OPEN) {
@@ -117,6 +137,18 @@ wss.on("connection", (socket, req) => {
             client.send(JSON.stringify(latestSensorData));
           }
         });
+      }
+      return;
+    }
+
+    // Handle manual mode toggle from web clients
+    if (msg === "toggle_manual") {
+      console.log("Manual mode toggle received from web client");
+      if (espSocket && espSocket.readyState === WebSocket.OPEN) {
+        espSocket.send(msg);
+        console.log("Manual mode toggle sent to ESP8266");
+      } else {
+        console.log("ESP8266 not connected, cannot send manual mode toggle");
       }
       return;
     }
@@ -225,7 +257,10 @@ setInterval(() => {
 console.log(`WebSocket relay server for ESP8266 Distance Sensor running on port ${process.env.PORT || 10000}`);
 console.log("Server features:");
 console.log("- Distance sensor data relay");
-console.log("- LED control commands");
+console.log("- Manual mode toggle support");
+console.log("- Traffic light LED status monitoring");
+console.log("- Vibration and buzzer status monitoring");
+console.log("- Button event handling");
 console.log("- Connection monitoring");
 console.log("- Automatic cleanup of dead connections");
 console.log("- Heartbeat pings to maintain connections");
