@@ -15,7 +15,7 @@ wss.on("connection", (socket, req) => {
     console.log("Received:", msg);
 
     // ESP8266 identification
-    if (msg === "ESP8266" || msg === "ESP8266_DISTANCE_SENSOR") {
+    if (msg === "ESP8266") {
       espSocket = socket;
       console.log("ESP8266 Distance Sensor connected.");
       
